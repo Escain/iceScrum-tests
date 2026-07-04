@@ -23,7 +23,7 @@ import requests
 BASE_URL = os.environ.get("ICESCRUM_URL", "http://localhost:8080")
 
 # Dev BootStrap users (grails-app/init/BootStrap.groovy + AuthorityService)
-USER = {"username": "z", "password": "z", "id": 2}
+USER = {"username": "z", "password": "z"}  # id is derived at runtime (differs per DB)
 ADMIN = {"username": "admin", "password": "adminadmin!"}
 
 # A per-run suffix keeps project keys unique if the suite is run repeatedly
@@ -97,7 +97,7 @@ class ApiClient:
 # --------------------------------------------------------------------------- #
 # Auth helpers / fixtures
 # --------------------------------------------------------------------------- #
-def _mint_token(username, password, user_id, token_name):
+def _mint_token(username, password, token_name):
     """Session-login then create a personal access token for the user."""
     s = requests.Session()
     s.get(f"{BASE_URL}/login/auth", timeout=30)
@@ -108,47 +108,26 @@ def _mint_token(username, password, user_id, token_name):
         allow_redirects=False,
     )
     assert r.status_code in (302, 200), f"login failed for {username}: {r.status_code}"
-    # Need the numeric user id for the token URL; fetch it if unknown.
-    if user_id is None:
-        cur = s.get(f"{BASE_URL}/ws/user/current", timeout=30)  # session works pre-token? no -> fallback below
-        user_id = cur.json().get("id") if cur.ok else None
-    r = s.post(
-        f"{BASE_URL}/user/{user_id}/token",
-        data={"userToken.name": token_name},
-        timeout=30,
-    )
+    # The token endpoint's URL user id is ignored — the token is minted for the authenticated user — so we
+    # don't need to know the numeric id (which differs by DB: H2 gives 1/2/3, PostgreSQL uses a shared
+    # sequence so IDs are non-contiguous).
+    r = s.post(f"{BASE_URL}/user/0/token", data={"userToken.name": token_name}, timeout=30)
     assert r.status_code == 200, f"token creation failed for {username}: {r.status_code} {r.text[:200]}"
     return r.json()["id"]
 
 
 @pytest.fixture(scope="session")
 def token():
-    return _mint_token(USER["username"], USER["password"], USER["id"], f"api-tests-{RUN_SUFFIX}")
+    return _mint_token(USER["username"], USER["password"], f"api-tests-{RUN_SUFFIX}")
 
 
 @pytest.fixture(scope="session")
 def admin_token():
-    # admin id is unknown/variable; discover it after login via token on /ws/user/current is circular,
-    # so we log in and read the id from the session-rendered token list response instead.
-    s = requests.Session()
-    s.get(f"{BASE_URL}/login/auth", timeout=30)
-    s.post(
-        f"{BASE_URL}/j_spring_security_check",
-        data={"j_username": ADMIN["username"], "j_password": ADMIN["password"]},
-        timeout=30, allow_redirects=False,
-    )
-    # admin is created right after a/z in BootStrap -> id 3 in a fresh dev DB.
-    for admin_id in (3, 1, 2, 4):
-        r = s.post(f"{BASE_URL}/user/{admin_id}/token",
-                   data={"userToken.name": f"api-admin-{RUN_SUFFIX}"}, timeout=30)
-        if r.status_code == 200:
-            tok = r.json()["id"]
-            # verify it is really admin by hitting an admin-only endpoint
-            check = requests.get(f"{BASE_URL}/ws/project",
-                                 headers={"x-icescrum-token": tok}, timeout=30)
-            if check.status_code == 200:
-                return tok
-    pytest.skip("could not obtain an admin token")
+    tok = _mint_token(ADMIN["username"], ADMIN["password"], f"api-admin-{RUN_SUFFIX}")
+    # sanity-check it really is an admin (admin-only listing)
+    if requests.get(f"{BASE_URL}/ws/project", headers={"x-icescrum-token": tok}, timeout=30).status_code != 200:
+        pytest.skip("admin token does not have admin rights")
+    return tok
 
 
 @pytest.fixture(scope="session")
@@ -161,12 +140,18 @@ def api_admin(admin_token):
     return ApiClient(BASE_URL, admin_token)
 
 
+@pytest.fixture(scope="session")
+def user_id(api):
+    """The authenticated test user's real id (not hardcoded — DB-dependent)."""
+    return api.get("/ws/user/current").json()["user"]["id"]
+
+
 # --------------------------------------------------------------------------- #
 # Domain fixtures (created once, reused across the whole suite)
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="session")
-def project(api):
-    """A project owned by user `z` (scrumMaster + productOwner) with dates
+def project(api, user_id):
+    """A project owned by the test user (scrumMaster + productOwner) with dates
     spanning 2026, plus its default 'all' backlog available for story tests."""
     pkey = f"AT{RUN_SUFFIX}"[:10].upper()
     body = {
@@ -175,8 +160,8 @@ def project(api):
             "pkey": pkey,
             "startDate": "2026-01-01T00:00:00Z",
             "endDate": "2026-12-31T00:00:00Z",
-            "productOwners": [{"id": USER["id"]}],
-            "team": {"name": f"API Team {RUN_SUFFIX}", "scrumMasters": [{"id": USER["id"]}]},
+            "productOwners": [{"id": user_id}],
+            "team": {"name": f"API Team {RUN_SUFFIX}", "scrumMasters": [{"id": user_id}]},
             "preferences": {"hidden": False},
         }
     }

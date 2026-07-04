@@ -9,9 +9,12 @@ def test_index(api, project, story):
 
 
 def test_filter_by_backlog(api, project, story):
-    # backlog id 1 = the default "all" sandbox backlog convention; must not 500
-    r = api.get(f"/ws/project/{project['pkey']}/story/backlog/1")
-    assert r.status_code in (200, 404)
+    # use a real backlog id from the project (ids are DB-dependent, not always 1)
+    backlogs = api.get(f"/ws/project/{project['pkey']}/backlog").json()
+    assert backlogs, "project should have default backlogs"
+    r = api.get(f"/ws/project/{project['pkey']}/story/backlog/{backlogs[0]['id']}")
+    assert r.status_code == 200, f"{r.status_code}: {r.text[:150]}"
+    assert isinstance(r.json(), list)
 
 
 def test_filter_by_feature(api, project, story, feature):

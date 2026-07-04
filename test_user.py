@@ -7,14 +7,14 @@ def test_current(api):
     assert r.json()["user"]["username"] == "z"
 
 
-def test_show_self(api):
-    r = api.get("/ws/user/2")
+def test_show_self(api, user_id):
+    r = api.get(f"/ws/user/{user_id}")
     assert r.status_code == 200
-    assert r.json()["id"] == 2
+    assert r.json()["id"] == user_id
 
 
-def test_activities(api):
-    r = api.get("/ws/user/2/activities")
+def test_activities(api, user_id):
+    r = api.get(f"/ws/user/{user_id}/activities")
     assert r.status_code == 200
     assert isinstance(r.json(), list)
 

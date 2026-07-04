@@ -50,7 +50,7 @@ def test_update(api, project, urgent_task):
     assert r.status_code in (200, 201), f"{r.status_code}: {r.text[:200]}"
 
 
-def test_task_created_before_planning_then_moved(api):
+def test_task_created_before_planning_then_moved(api, user_id):
     """Regression: a task added to a story while it is still in the sandbox must
     get its backlog set to the sprint when the story is planned, so it stays
     visible and can be moved on the task board. This broke because Project.equals
@@ -58,13 +58,13 @@ def test_task_created_before_planning_then_moved(api):
     validator during planning (task kept a null sprint -> invisible).
 
     Uses its own project (a second release would overlap the shared fixture's)."""
-    from conftest import RUN_SUFFIX, USER
+    from conftest import RUN_SUFFIX
     pkraw = f"TBM{RUN_SUFFIX}"[:10].upper()
     proj = api.post("/ws/project", {"project": {
         "name": f"TBM {RUN_SUFFIX}", "pkey": pkraw,
         "startDate": "2026-01-01T00:00:00Z", "endDate": "2026-12-31T00:00:00Z",
-        "productOwners": [{"id": USER["id"]}],
-        "team": {"name": f"TBM team {RUN_SUFFIX}", "scrumMasters": [{"id": USER["id"]}]},
+        "productOwners": [{"id": user_id}],
+        "team": {"name": f"TBM team {RUN_SUFFIX}", "scrumMasters": [{"id": user_id}]},
         "preferences": {"hidden": False}}})
     assert proj.status_code in (200, 201), f"project create: {proj.status_code} {proj.text[:150]}"
     pk = proj.json()["pkey"]

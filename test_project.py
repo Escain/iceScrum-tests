@@ -13,14 +13,14 @@ def test_activities(api, project):
     assert r.status_code == 200
 
 
-def test_list_by_user(api):
-    r = api.get("/ws/project/user/2")
+def test_list_by_user(api, user_id):
+    r = api.get(f"/ws/project/user/{user_id}")
     assert r.status_code == 200
     assert isinstance(r.json(), list)
 
 
-def test_list_by_user_and_role(api):
-    r = api.get("/ws/project/user/2/inProject")
+def test_list_by_user_and_role(api, user_id):
+    r = api.get(f"/ws/project/user/{user_id}/inProject")
     assert r.status_code == 200
 
 
