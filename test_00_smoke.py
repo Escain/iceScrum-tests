@@ -5,7 +5,7 @@ Run these first -- if a fixture is broken the whole suite depends on it."""
 def test_version(api):
     r = api.get("/ws/version")
     assert r.status_code == 200
-    assert "7.55" in r.text
+    assert "7.5" in r.text  # 7.5x line
 
 
 def test_version_verbose(api):
