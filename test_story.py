@@ -22,10 +22,31 @@ def test_filter_by_feature(api, project, story, feature):
     assert r.status_code in (200, 404)
 
 
-def test_update(api, project, story):
+def test_update_texts_persist(api, project, story):
+    # Regression (Grails 7): name/description/notes live on BacklogElement (outside
+    # grails-app/domain); without @DirtyCheck their setters never mark the entity
+    # dirty, the flush issues no UPDATE and the response happily echoes the bound
+    # in-memory values. So asserting on the update response is NOT enough — re-fetch.
     r = api.post(f"/ws/project/{project['pkey']}/story/{story['id']}",
-                 {"story": {"description": "updated description"}})
+                 {"story": {"name": "updated story name",
+                            "description": "updated description",
+                            "notes": "updated notes"}})
     assert r.status_code in (200, 201), f"{r.status_code}: {r.text[:200]}"
+    fetched = api.get(f"/ws/project/{project['pkey']}/story/{story['id']}").json()
+    assert fetched["name"] == "updated story name"
+    assert fetched["description"] == "updated description"
+    assert fetched["notes"] == "updated notes"
+
+
+def test_print_backlog_pdf(api, project, story):
+    # Regression (Grails 7): PDF export threw NoSuchMethodError with itext 2.1.7
+    # (JasperReports 6.21.4 needs the OpenPDF fork of com.lowagie.text).
+    backlogs = api.get(f"/ws/project/{project['pkey']}/backlog").json()
+    sandbox = next(b for b in backlogs if b.get("code") == "sandbox")  # fixture story is suggested
+    r = api.get(f"/ws/project/{project['pkey']}/story/backlog/{sandbox['id']}/print/PDF")
+    assert r.status_code == 200, f"{r.status_code}: {r.text[:200]}"
+    assert r.headers.get("Content-Type", "").startswith("application/pdf")
+    assert r.content.startswith(b"%PDF"), "response is not a PDF document"
 
 
 def test_show(api, project, story):
