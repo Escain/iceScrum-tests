@@ -1,4 +1,4 @@
-"""Attachment upload regression test (iceScrum 7.56.3).
+"""Attachment upload regression test (iceScrum 7.57).
 
 Guards the three defects that made every UI file upload fail after the
 Grails 7 port:
