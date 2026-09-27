@@ -50,6 +50,21 @@ def test_update(api, project, urgent_task):
     assert r.status_code in (200, 201), f"{r.status_code}: {r.text[:200]}"
 
 
+def test_tags_persist_on_first_save(api, project, urgent_task):
+    # Regression (Grails 7): a brand-new tag only stuck after saving twice.
+    from conftest import RUN_SUFFIX
+    new_tag = f"tasktag{RUN_SUFFIX}"
+    url = f"/ws/project/{project['pkey']}/task/{urgent_task['id']}"
+    r = api.post(url, {"task": {"tags": [new_tag]}})
+    assert r.status_code in (200, 201), f"{r.status_code}: {r.text[:200]}"
+    assert new_tag in r.json()["tags"], "update response lost the new tag"
+    assert new_tag in api.get(url).json()["tags"], "new tag not persisted after one save"
+
+    r = api.post(url, {"task": {"tags": ""}})
+    assert r.status_code in (200, 201), f"{r.status_code}: {r.text[:200]}"
+    assert new_tag not in api.get(url).json()["tags"], "tag removal not persisted"
+
+
 def test_task_created_before_planning_then_moved(api, user_id):
     """Regression: a task added to a story while it is still in the sandbox must
     get its backlog set to the sprint when the story is planned, so it stays

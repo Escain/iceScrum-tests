@@ -38,6 +38,22 @@ def test_update_texts_persist(api, project, story):
     assert fetched["notes"] == "updated notes"
 
 
+def test_tags_persist_on_first_save(api, project, story):
+    # Regression (Grails 7): a brand-new tag only stuck after saving twice. Use a
+    # never-seen tag name so the first save has to create both the Tag and the link.
+    from conftest import RUN_SUFFIX
+    new_tag = f"storytag{RUN_SUFFIX}"
+    url = f"/ws/project/{project['pkey']}/story/{story['id']}"
+    r = api.post(url, {"story": {"tags": [new_tag]}})
+    assert r.status_code in (200, 201), f"{r.status_code}: {r.text[:200]}"
+    assert new_tag in r.json()["tags"], "update response lost the new tag"
+    assert new_tag in api.get(url).json()["tags"], "new tag not persisted after one save"
+
+    r = api.post(url, {"story": {"tags": ""}})
+    assert r.status_code in (200, 201), f"{r.status_code}: {r.text[:200]}"
+    assert new_tag not in api.get(url).json()["tags"], "tag removal not persisted"
+
+
 def test_print_backlog_pdf(api, project, story):
     # Regression (Grails 7): PDF export threw NoSuchMethodError with itext 2.1.7
     # (JasperReports 6.21.4 needs the OpenPDF fork of com.lowagie.text).
